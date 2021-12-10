@@ -41,17 +41,31 @@ class MyWindow(QMainWindow):
         settingsAction.triggered.connect(self.close)
         settingsMenu = menubar.addMenu('&Settings')
         settingsMenu.addAction(settingsAction)
+
+        # ツールバー「一時停止・再開ボタン」
+        videoAct = QAction('一時停止・再開', self)
+        videoAct.triggered.connect(self.pause_or_play)
+        self.toolbar = self.addToolBar('一時停止・再開') # （TODO: addToolBarの引数間違ってたら直す）
+        self.toolbar.addAction(videoAct)
         
-        self.resize(600, 600)           # 250x150ピクセルにリサイズ
+        self.resize(600, 600)                  # 600x600ピクセルにリサイズ
         self.setWindowTitle('居眠り検知ツール') # タイトルを設定
         self.show()
         
-    
+
     def setVideo(self):
         """ 選択されたファイルのパスを取得 """
         self.filepath = QFileDialog.getOpenFileName(self, caption="", directory="", filter="*.mp4")[0]
 
-        
+    
+    def pause_or_play(self):
+        """ 一時停止・再開ボタンが押されたときの処理 """
+        # TODO: カメラのときとビデオファイルのときで場合分けする必要がありそうなので、
+        # 0ならカメラ、ファイル名ならビデオ みたいな判定ができる変数が欲しい
+        print('clicked: pause_or_play')
+        # まだどうやって止めたり再生するのかわからない
+
+
 """ 
 ビデオキャプチャクラス 
 TODO :
@@ -133,9 +147,9 @@ TODO :
 """
 class DozingDetection():
     hoge = 0
-            
-        
-        
+
+
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(app.deleteLater)
