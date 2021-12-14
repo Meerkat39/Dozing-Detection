@@ -116,7 +116,7 @@ class VideoCaptureView(QGraphicsView):
         self.pixmap = None
         self.item = None
         self.dozingDetection = DozingDetection()
-
+        
         # VideoCapture (カメラからの画像取り込み)を初期化
         self.capture = cv2.VideoCapture(0)
 
@@ -188,8 +188,6 @@ class VideoCaptureView(QGraphicsView):
 TODO :
 ・目の状態を検出
 """
-
-
 class DozingDetection():
     """元はdef __init__(self, viewer):"""
 
