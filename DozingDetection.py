@@ -121,6 +121,7 @@ class VideoCaptureView(QGraphicsView):
         # 変数を初期化
         self.pixmap = None
         self.item = None
+        self.dozingDetection = DozingDetection()
         
         # VideoCapture (カメラからの画像取り込み)を初期化
         self.capture = cv2.VideoCapture(0)
@@ -172,6 +173,7 @@ class VideoCaptureView(QGraphicsView):
             状態によって色を更新(未実装) 
             DozingDetectionクラスから状態を取得し、それによってcolorを場合分け
         """
+        self.dozingDetection.detect_eyes(self.capture.read())
         color = green
         im = cv2.putText(im, 'o', (555,im.shape[-1]+48), font, 1, color, 15, cv2.LINE_AA)
       
@@ -186,9 +188,10 @@ TODO :
 ・目の状態を検出
 """
 class DozingDetection():
-    def __init__(self, viewer):
-        self.viewer = viewer # VideoCaptureViewクラスのインスタンス
-        self.cap = self.viewer.capture
+    """元はdef __init__(self, viewer):"""
+    def __init__(self):
+        #self.viewer = viewer # VideoCaptureViewクラスのインスタンス
+        #self.cap = self.viewer.capture
         self.face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_alt2.xml')
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
 
@@ -207,11 +210,11 @@ class DozingDetection():
             cv2.putText(face_mat, str(i), (x + 2, y - 2),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
     
-    def detect_eyes(self):
+    def detect_eyes(self, ret, rgb):
         while True:
             tick = cv2.getTickCount()
 
-            ret, rgb = self.cap.read()
+            """ret, rgb = self.cap.read() classを分離するために消す"""
             gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
             faces = self.face_cascade.detectMultiScale(
                 gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
