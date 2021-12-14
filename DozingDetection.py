@@ -1,4 +1,5 @@
-import sys, os
+import sys
+import os
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
@@ -7,7 +8,7 @@ import cv2
 import dlib
 from imutils import face_utils
 from scipy.spatial import distance
-import platform # 追加
+import platform
 
 """ 
 Windowクラス 
@@ -16,17 +17,19 @@ TODO :
 ・Settings項目
 ・カメラの開始 / 停止
 """
+
+
 class MyWindow(QMainWindow):
-    
+
     def __init__(self, viewer):
         """ インスタンスが生成されたときに呼び出されるメソッド """
         super(MyWindow, self).__init__()
         self.initUI()
         self.viewer = viewer
-        
+
     def initUI(self):
         """ UIの初期化 """
-        
+
         """
             File -> {open} : ファイルを開く
             Setting -> {,  : ???
@@ -39,7 +42,7 @@ class MyWindow(QMainWindow):
         fileAction.triggered.connect(self.setVideo)
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(fileAction)
-        
+
         # 項目「Settings」の追加
         settingsAction = QAction('&', self)
         settingsAction.triggered.connect(self.close)
@@ -49,46 +52,37 @@ class MyWindow(QMainWindow):
         # ツールバー「一時停止・再開ボタン」
         videoAct = QAction('一時停止・再開', self)
         videoAct.triggered.connect(self.pause_or_play)
-        self.toolbar = self.addToolBar('一時停止・再開') # （TODO: addToolBarの引数間違ってたら直す）
+        # （TODO: addToolBarの引数間違ってたら直す）
+        self.toolbar = self.addToolBar('一時停止・再開')
         self.toolbar.addAction(videoAct)
-        
-    
-        """↓追加"""
+
+        # ツールバー「通知」
         alarm = QAction('通知', self)
         alarm.triggered.connect(self.beep)
         self.toolbar.addAction(alarm)
-        """ここまで"""
-        
-        
+
         self.resize(600, 600)                  # 600x600ピクセルにリサイズ
-        self.setWindowTitle('居眠り検知ツール') # タイトルを設定
+        self.setWindowTitle('居眠り検知ツール')  # タイトルを設定
         self.show()
-        
 
     def setVideo(self):
         """ 選択されたファイルのパスを取得 """
         self.filepath = QFileDialog.getOpenFileName(self, caption="", directory="", filter="*.mp4")[0]
 
-    
     def pause_or_play(self):
         """ 一時停止・再開ボタンが押されたときの処理 """
         # TODO: カメラのときとビデオファイルのときで場合分けする必要がありそうなので、
         # 0ならカメラ、ファイル名ならビデオ みたいな判定ができる変数が欲しい
         print('clicked: pause_or_play')
         # まだどうやって止めたり再生するのかわからない
-        dozing_detection = DozingDetection(self.viewer)
-        dozing_detection.detect_eyes()
-        
-        
-        
-        
+
     def beep(self):
         """ 異常を検知したときの処理（ビープ音を鳴らす.） """
-        
+
         #freq : 周波数
         #dur  : 継続時間（ms）
-        freq=1400
-        dur=1000
+        freq = 1400
+        dur = 1000
         if platform.system() == "Windows":
             # Windowsの場合
             import winsound
@@ -97,12 +91,10 @@ class MyWindow(QMainWindow):
             # Macの場合
             import os
             os.system('play -n synth %s sin %s' % (dur/1000, freq))
-            
+
         # Warning Message box
-        
+
         QMessageBox.warning(self, "警告", "居眠り検知しました.")
-        
-    
 
 
 """ 
@@ -111,17 +103,20 @@ TODO :
 ・状態によって居眠り状態の色を更新
 ・リアルタイムの画像を処理するのか選択された動画の画像を処理するのかの場合分け
 """
-class VideoCaptureView(QGraphicsView):
-    repeat_interval = 200 # ms 間隔で画像更新
 
-    def __init__(self, parent = None):
+
+class VideoCaptureView(QGraphicsView):
+    repeat_interval = 200  # ms 間隔で画像更新
+
+    def __init__(self, parent=None):
         """ コンストラクタ（インスタンスが生成される時に呼び出される） """
         super(VideoCaptureView, self).__init__(parent)
-        
+
         # 変数を初期化
         self.pixmap = None
         self.item = None
-        
+        self.dozingDetection = DozingDetection()
+
         # VideoCapture (カメラからの画像取り込み)を初期化
         self.capture = cv2.VideoCapture(0)
 
@@ -130,53 +125,61 @@ class VideoCaptureView(QGraphicsView):
 
         # ウィンドウの初期化
         self.scene = QGraphicsScene()   # 描画用キャンバスを作成
-        self.setScene(self.scene) 
+        self.setScene(self.scene)
         self.setVideoImage()
-        
+
         # タイマー更新 (一定間隔でsetVideoImageメソッドを呼び出す)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.setVideoImage)
-        self.timer.start(self.repeat_interval)        
-        
+        self.timer.start(self.repeat_interval)
+
     def setVideoImage(self):
         """ ビデオの画像を取得して表示 """
         ret, cv_img = self.capture.read()                # ビデオキャプチャデバイスから画像を取得
         if ret == False:
             return
-        cv_img = cv2.cvtColor(cv_img,cv2.COLOR_BGR2RGB)  # 色変換 BGR->RGB
-        
+        cv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)  # 色変換 BGR->RGB
+
         cv_img = self.processing(cv_img)
 
         height, width, dim = cv_img.shape
         bytesPerLine = dim * width                       # 1行辺りのバイト数
-        
+
         self.image = QImage(cv_img.data, width, height, bytesPerLine, QImage.Format_RGB888)
         if self.pixmap == None:                          # 初回はQPixmap, QGraphicPixmapItemインスタンスを作成
             self.pixmap = QPixmap.fromImage(self.image)
             self.item = QGraphicsPixmapItem(self.pixmap)
             self.scene.addItem(self.item)                # キャンバスに配置
         else:
-            self.pixmap.convertFromImage(self.image)     # ２回目以降はQImage, QPixmapを設定するだけ
+            # ２回目以降はQImage, QPixmapを設定するだけ
+            self.pixmap.convertFromImage(self.image)
             self.item.setPixmap(self.pixmap)
-    
+
     def processing(self, src):
         """ 画像処理 """
         im = src.copy()
-        
+
         font = cv2.FONT_HERSHEY_SIMPLEX
-        im = cv2.putText(im, 'State:', (450,im.shape[-1]+50), font, 1, (0,0,0), 2, cv2.LINE_AA)
-        red = (255,0,0)
-        yellow = (255,255,0)
-        green = (0,255,0)
+        red = (255, 0, 0)
+        yellow = (255, 255, 0)
+        green = (0, 255, 0)
         """ 
             状態によって色を更新(未実装) 
             DozingDetectionクラスから状態を取得し、それによってcolorを場合分け
         """
+        ret, rgb = self.capture.read()  # たぶんタプルで返ってくるから分離する
+        rgb, faces = self.dozingDetection.detect_eyes(ret, rgb)  # facesは顔が認識できたかの結果っぽいから後で使えそう
+        # TODO:
+        # detect_eyes内でputTextとかimshowとか実行してるからウィンドウがわかれちゃってる説あるから
+        # setVideoImageはいじらずにdetect_eyes関数の返り値とかをうまく調整してprocessing内で表示を調整できるようにするのがよさそう
+
+        # TODO: 適切な返り値を設定した後は前回のフレームの結果とかを保持していって表示を変えるような処理をつくりたい
         color = green
-        im = cv2.putText(im, 'o', (555,im.shape[-1]+48), font, 1, color, 15, cv2.LINE_AA)
-      
-        dst = im
-        
+        rgb = cv2.putText(rgb, 'State:', (450, im.shape[-1]+50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
+        rgb = cv2.putText(rgb, 'o', (555, im.shape[-1]+48), font, 1, color, 15, cv2.LINE_AA)
+
+        dst = rgb
+
         return dst
 
 
@@ -185,15 +188,15 @@ class VideoCaptureView(QGraphicsView):
 TODO :
 ・目の状態を検出
 """
+
+
 class DozingDetection():
-    def __init__(self, viewer):
-        self.viewer = viewer # VideoCaptureViewクラスのインスタンス
-        self.cap = self.viewer.capture
+    """元はdef __init__(self, viewer):"""
+
+    def __init__(self):
         self.face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_alt2.xml')
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
 
-    ##################################################################
-    # 実験的に追加
     def calc_ear(self, eye):
         A = distance.euclidean(eye[1], eye[5])
         B = distance.euclidean(eye[2], eye[4])
@@ -204,57 +207,49 @@ class DozingDetection():
     def eye_marker(self, face_mat, position):
         for i, ((x, y)) in enumerate(position):
             cv2.circle(face_mat, (x, y), 1, (255, 255, 255), -1)
-            cv2.putText(face_mat, str(i), (x + 2, y - 2),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
-    
-    def detect_eyes(self):
-        while True:
-            tick = cv2.getTickCount()
+            cv2.putText(face_mat, str(i), (x + 2, y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
 
-            ret, rgb = self.cap.read()
-            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-            faces = self.face_cascade.detectMultiScale(
-                gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
+    def detect_eyes(self, ret, rgb):
+        tick = cv2.getTickCount()
 
-            if len(faces) == 1:
-                x, y, w, h = faces[0, :]
-                cv2.rectangle(rgb, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
 
-                face_gray = gray[y :(y + h), x :(x + w)]
-                scale = 480 / h
-                face_gray_resized = cv2.resize(face_gray, dsize=None, fx=scale, fy=scale)
+        if len(faces) == 1:
+            x, y, w, h = faces[0, :]
+            cv2.rectangle(rgb, (x, y), (x + w, y + h), (255, 0, 0), 2)
 
-                face = dlib.rectangle(0, 0, face_gray_resized.shape[1], face_gray_resized.shape[0])
-                face_parts = self.face_parts_detector(face_gray_resized, face)
-                face_parts = face_utils.shape_to_np(face_parts)
+            face_gray = gray[y:(y + h), x:(x + w)]
+            scale = 480 / h
+            face_gray_resized = cv2.resize(face_gray, dsize=None, fx=scale, fy=scale)
 
-                left_eye = face_parts[42:48]
-                self.eye_marker(face_gray_resized, left_eye)
+            face = dlib.rectangle(0, 0, face_gray_resized.shape[1], face_gray_resized.shape[0])
+            face_parts = self.face_parts_detector(face_gray_resized, face)
+            face_parts = face_utils.shape_to_np(face_parts)
 
-                left_eye_ear = self.calc_ear(left_eye)
-                cv2.putText(rgb, "LEFT eye EAR:{} ".format(left_eye_ear), 
-                    (10, 100), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
+            left_eye = face_parts[42:48]
+            self.eye_marker(face_gray_resized, left_eye)
 
-                right_eye = face_parts[36:42]
-                self.eye_marker(face_gray_resized, right_eye)
+            left_eye_ear = self.calc_ear(left_eye)
+            cv2.putText(rgb, "LEFT eye EAR:{} ".format(left_eye_ear), (10, 100), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
 
-                right_eye_ear = self.calc_ear(right_eye)
-                cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), 
-                    (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
+            right_eye = face_parts[36:42]
+            self.eye_marker(face_gray_resized, right_eye)
 
-                if (left_eye_ear + right_eye_ear) < 0.55:
-                    cv2.putText(rgb,"Sleepy eyes. Wake up!",
-                        (10,180), cv2.FONT_HERSHEY_PLAIN, 3, (0,0,255), 3, 1)
+            right_eye_ear = self.calc_ear(right_eye)
+            cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
 
-                cv2.imshow('frame_resize', face_gray_resized)
+            if (left_eye_ear + right_eye_ear) < 0.55:
 
-            fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
-            cv2.putText(rgb, "FPS:{} ".format(int(fps)), 
-                (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
+                # この表示はあとで消す
+                cv2.putText(rgb, "Sleepy eyes. Wake up!", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
+                #  TODO: ここでなにか返り値用の変数をつくるとよさそう
 
-            cv2.imshow('frame', rgb)
-            if cv2.waitKey(1) == 27:
-                break  # esc to quit
+            cv2.imshow('frame_resize', face_gray_resized)  # これがグレーのウィンドウ
+
+        fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
+        rgb = cv2.putText(rgb, "FPS:{} ".format(int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
+        return rgb, faces
 
 
 if __name__ == '__main__':
@@ -262,10 +257,10 @@ if __name__ == '__main__':
     app.aboutToQuit.connect(app.deleteLater)
 
     viewer = VideoCaptureView()       # VideoCaptureView ウィジエットviewを作成
-    main = MyWindow(viewer)                 # メインウィンドウmainを作成
+    main = MyWindow(viewer)           # メインウィンドウmainを作成
     main.setCentralWidget(viewer)     # mainにviewを埋め込む
     main.show()
-    
+
     app.exec_()
-    
+
     viewer.capture.release()
