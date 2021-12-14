@@ -4,10 +4,10 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 import cv2
 import numpy as np
+import platform # 追加
 
 """ 
 Windowクラス 
-
 TODO :
 ・File項目
 ・Settings項目
@@ -48,6 +48,14 @@ class MyWindow(QMainWindow):
         self.toolbar = self.addToolBar('一時停止・再開') # （TODO: addToolBarの引数間違ってたら直す）
         self.toolbar.addAction(videoAct)
         
+    
+        """↓追加"""
+        alarm = QAction('通知', self)
+        alarm.triggered.connect(self.beep)
+        self.toolbar.addAction(alarm)
+        """ここまで"""
+        
+        
         self.resize(600, 600)                  # 600x600ピクセルにリサイズ
         self.setWindowTitle('居眠り検知ツール') # タイトルを設定
         self.show()
@@ -64,6 +72,31 @@ class MyWindow(QMainWindow):
         # 0ならカメラ、ファイル名ならビデオ みたいな判定ができる変数が欲しい
         print('clicked: pause_or_play')
         # まだどうやって止めたり再生するのかわからない
+        
+        
+        
+        
+    def beep(self):
+        """ 異常を検知したときの処理（ビープ音を鳴らす.） """
+        
+        #freq : 周波数
+        #dur  : 継続時間（ms）
+        freq=1400
+        dur=1000
+        if platform.system() == "Windows":
+            # Windowsの場合
+            import winsound
+            winsound.Beep(freq, dur)
+        else:
+            # Macの場合
+            import os
+            os.system('play -n synth %s sin %s' % (dur/1000, freq))
+            
+        # Warning Message box
+        
+        QMessageBox.warning(self, "警告", "居眠り検知しました.")
+        
+    
 
 
 """ 
