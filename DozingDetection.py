@@ -17,8 +17,6 @@ TODO :
 ・Settings項目
 ・カメラの開始 / 停止
 """
-
-
 class MyWindow(QMainWindow):
 
     def __init__(self, viewer):
@@ -103,8 +101,6 @@ TODO :
 ・状態によって居眠り状態の色を更新
 ・リアルタイムの画像を処理するのか選択された動画の画像を処理するのかの場合分け
 """
-
-
 class VideoCaptureView(QGraphicsView):
     repeat_interval = 200  # ms 間隔で画像更新
 
@@ -178,8 +174,8 @@ class VideoCaptureView(QGraphicsView):
         rgb = cv2.putText(rgb, 'State:', (450, im.shape[-1]+50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
         rgb = cv2.putText(rgb, 'o', (555, im.shape[-1]+48), font, 1, color, 15, cv2.LINE_AA)
 
-        dst = rgb
-
+        dst = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        
         return dst
 
 
