@@ -9,6 +9,7 @@ import dlib
 from imutils import face_utils
 from scipy.spatial import distance
 import platform
+DOZING, NEARLY_DOZING, AWAKE = 0, 1, 2
 
 """ 
 Windowクラス 
@@ -164,7 +165,17 @@ class VideoCaptureView(QGraphicsView):
             DozingDetectionクラスから状態を取得し、それによってcolorを場合分け
         """
         ret, rgb = self.capture.read()  # たぶんタプルで返ってくるから分離する
-        rgb, faces = self.dozingDetection.detect_eyes(ret, rgb)  # facesは顔が認識できたかの結果っぽいから後で使えそう
+        
+        #rgb, faces = self.dozingDetection.detect_eyes(ret, rgb)  # facesは顔が認識できたかの結果っぽいから後で使えそう
+        if self.dozingDetection.detect_dozing == DOZING:
+            pass
+        elif self.dozingDetection.detect_dozing == NEARLY_DOZING:
+            pass
+        elif self.dozingDetection.detect_dozing == AWAKE:
+            pass
+        else:  # エラー
+            pass
+
         # TODO:
         # detect_eyes内でputTextとかimshowとか実行してるからウィンドウがわかれちゃってる説あるから
         # setVideoImageはいじらずにdetect_eyes関数の返り値とかをうまく調整してprocessing内で表示を調整できるようにするのがよさそう
@@ -190,6 +201,7 @@ class DozingDetection():
     def __init__(self):
         self.face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_alt2.xml')
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
+        self.time_closed_eyelid = 0  # まぶたが連続で何秒とじているか
 
     def calc_ear(self, eye):
         A = distance.euclidean(eye[1], eye[5])
@@ -203,12 +215,23 @@ class DozingDetection():
             cv2.circle(face_mat, (x, y), 1, (255, 255, 255), -1)
             cv2.putText(face_mat, str(i), (x + 2, y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
 
-    def detect_eyes(self, ret, rgb):
+    """
+        眠っているなら   True
+        眠っていないなら False
+        ただし、顔が検出できていなかったらTrueを返す
+        (姿勢が悪いのは眠っているためと見なしTrue)
+    """
+    def isDozing(self, ret, rgb):
         tick = cv2.getTickCount()
 
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
 
+        # 顔検出ができていなかったら
+        if len(faces) != 1:
+            return False
+
+        # 顔検出ができているならば
         if len(faces) == 1:
             x, y, w, h = faces[0, :]
             cv2.rectangle(rgb, (x, y), (x + w, y + h), (255, 0, 0), 2)
@@ -233,7 +256,11 @@ class DozingDetection():
             right_eye_ear = self.calc_ear(right_eye)
             cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
 
+            # まぶたが閉じている
             if (left_eye_ear + right_eye_ear) < 0.55:
+                return True
+            else:
+                return False
 
                 # この表示はあとで消す
                 cv2.putText(rgb, "Sleepy eyes. Wake up!", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
@@ -241,9 +268,29 @@ class DozingDetection():
 
             cv2.imshow('frame_resize', face_gray_resized)  # これがグレーのウィンドウ
 
-        fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
-        rgb = cv2.putText(rgb, "FPS:{} ".format(int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
-        return rgb, faces
+        #fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
+        #rgb = cv2.putText(rgb, "FPS:{} ".format(int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
+        #return rgb, faces
+    
+    def detect_dozing(self, ret, rgb):
+        if self.isDozing(ret,rgb):
+            self.time_closed_eyelid += 1
+        else:
+            self.time_closed_eyelid = 0
+        
+        """
+            TODO :
+            閾値を設定する(マジックナンバーも避けるようにする)
+            返り値を工夫する (3状態あるためTrue,Falseじゃ足らない)
+            -> マクロを使う？
+        """
+        if self.time_closed_eyelid >= 20:
+            return DOZING
+        elif self.time_closed_eyelid >= 10:
+            return NEARLY_DOZING
+        else:
+            return AWAKE
+        
 
 
 if __name__ == '__main__':
