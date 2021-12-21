@@ -67,6 +67,7 @@ class MyWindow(QMainWindow):
     def setVideo(self):
         """ 選択されたファイルのパスを取得 """
         self.filepath = QFileDialog.getOpenFileName(self, caption="", directory="", filter="*.mp4")[0]
+        # TODO: viewerの中に定数を作って、それにfilepathを渡してVideoCaptureViewの引数にする
 
     def pause_or_play(self):
         """ 一時停止・再開ボタンが押されたときの処理 """
@@ -167,14 +168,18 @@ class VideoCaptureView(QGraphicsView):
         ret, rgb = self.capture.read()  # たぶんタプルで返ってくるから分離する
         
         #rgb, faces = self.dozingDetection.detect_eyes(ret, rgb)  # facesは顔が認識できたかの結果っぽいから後で使えそう
-        if self.dozingDetection.detect_dozing == DOZING:
-            pass
-        elif self.dozingDetection.detect_dozing == NEARLY_DOZING:
-            pass
-        elif self.dozingDetection.detect_dozing == AWAKE:
-            pass
+        state = self.dozingDetection.detect_dozing(ret, rgb)
+        if state == DOZING:
+            # TODO: ここでなんかputTextする
+            cv2.putText(rgb, "DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
+        elif state == NEARLY_DOZING:
+            cv2.putText(rgb, "NEARLY_DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
+        elif state == AWAKE:
+            # cv2.putText(rgb, "Sleepy eyes. Wake up!", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
+            print("AWAKE")
         else:  # エラー
             pass
+            print("error")
 
         # TODO:
         # detect_eyes内でputTextとかimshowとか実行してるからウィンドウがわかれちゃってる説あるから
