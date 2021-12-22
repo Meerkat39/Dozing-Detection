@@ -9,6 +9,7 @@ import dlib
 from imutils import face_utils
 from scipy.spatial import distance
 import platform
+
 DOZING, NEARLY_DOZING, AWAKE = 0, 1, 2
 
 """ 
@@ -48,33 +49,41 @@ class MyWindow(QMainWindow):
         settingsMenu = menubar.addMenu('&Settings')
         settingsMenu.addAction(settingsAction)
 
-        # ツールバー「一時停止・再開ボタン」
-        videoAct = QAction('一時停止・再開', self)
-        videoAct.triggered.connect(self.pause_or_play)
+        # ツールバー「カメラをセットするボタン」
+        cameraAct = QAction('カメラを使用する', self)
+        cameraAct.triggered.connect(self.setCamera)
         # （TODO: addToolBarの引数間違ってたら直す）
-        self.toolbar = self.addToolBar('一時停止・再開')
-        self.toolbar.addAction(videoAct)
+        self.toolbar = self.addToolBar('カメラを使用する')
+        self.toolbar.addAction(cameraAct)
+
+        # ツールバー「一時停止ボタン」
+        pauseAct = QAction('一時停止', self)
+        pauseAct.triggered.connect(self.pause)
+        # （TODO: addToolBarの引数間違ってたら直す）
+        self.toolbar = self.addToolBar('一時停止')
+        self.toolbar.addAction(pauseAct)
 
         # ツールバー「通知」
-        alarm = QAction('通知', self)
-        alarm.triggered.connect(self.beep)
-        self.toolbar.addAction(alarm)
+        alarmAct = QAction('通知', self)
+        alarmAct.triggered.connect(self.beep)
+        self.toolbar.addAction(alarmAct)
 
         self.resize(600, 600)                  # 600x600ピクセルにリサイズ
         self.setWindowTitle('居眠り検知ツール')  # タイトルを設定
         self.show()
 
     def setVideo(self):
-        """ 選択されたファイルのパスを取得 """
+        """ 選択されたファイルのパスを取得して、 """
         self.filepath = QFileDialog.getOpenFileName(self, caption="", directory="", filter="*.mp4")[0]
-        # TODO: viewerの中に定数を作って、それにfilepathを渡してVideoCaptureViewの引数にする
+        self.viewer.setVideoCapture(False, self.filepath)
 
-    def pause_or_play(self):
-        """ 一時停止・再開ボタンが押されたときの処理 """
-        # TODO: カメラのときとビデオファイルのときで場合分けする必要がありそうなので、
-        # 0ならカメラ、ファイル名ならビデオ みたいな判定ができる変数が欲しい
-        print('clicked: pause_or_play')
-        # まだどうやって止めたり再生するのかわからない
+    def setCamera(self):
+        """ カメラに切り替える """
+        self.viewer.setVideoCapture(True)
+
+    def pause(self):
+        """ 一時停止ボタンが押されたときの処理 """
+        self.viewer.capture.release()
 
     def beep(self):
         """ 異常を検知したときの処理（ビープ音を鳴らす.） """
@@ -115,11 +124,8 @@ class VideoCaptureView(QGraphicsView):
         self.item = None
         self.dozingDetection = DozingDetection()
         
-        # VideoCapture (カメラからの画像取り込み)を初期化
-        self.capture = cv2.VideoCapture(0)
-
-        if self.capture.isOpened() is False:
-            raise IOError("failed in opening VideoCapture")
+        # VideoCaptureを初期化 (カメラからの画像取り込み)
+        self.setVideoCapture(True)
 
         # ウィンドウの初期化
         self.scene = QGraphicsScene()   # 描画用キャンバスを作成
@@ -130,6 +136,26 @@ class VideoCaptureView(QGraphicsView):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.setVideoImage)
         self.timer.start(self.repeat_interval)
+    
+    def setVideoCapture(self, isCamera = True, filepath = ""):
+        """ cv2.VideoCapture関数の引数を設定する（エラー処理用） """ 
+
+        if isCamera or filepath=="":
+            # カメラを設定（内蔵カメラ(0) or 外付けカメラ1つめ(1) or その他 を設定する）
+            camera_num_choices = [0, 1, -1, 2, 3, 4, 5]
+            self.capture = cv2.VideoCapture(0)
+            for camera_num in camera_num_choices:
+                self.capture = cv2.VideoCapture(camera_num)
+                # 開けたら終了
+                if self.capture.isOpened() is True:
+                    break
+        else:
+            # mp4ファイルを設定する
+            self.capture = cv2.VideoCapture(filepath)
+        
+        # 最後にエラー処理
+        if self.capture.isOpened() is False:
+            raise IOError("failed in opening VideoCapture")
 
     def setVideoImage(self):
         """ ビデオの画像を取得して表示 """
@@ -158,44 +184,42 @@ class VideoCaptureView(QGraphicsView):
         im = src.copy()
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        red = (255, 0, 0)
-        yellow = (255, 255, 0)
+        # BGR表記に修正しました（おそらくputTextの引数がBGRになっている必要あり）
+        red = (0, 0, 255)
+        yellow = (0, 255, 255)
         green = (0, 255, 0)
-        """ 
+        """
             状態によって色を更新(未実装) 
             DozingDetectionクラスから状態を取得し、それによってcolorを場合分け
         """
-        ret, rgb = self.capture.read()  # たぶんタプルで返ってくるから分離する
-        
-        #rgb, faces = self.dozingDetection.detect_eyes(ret, rgb)  # facesは顔が認識できたかの結果っぽいから後で使えそう
+        ret, rgb = self.capture.read()
+        # 居眠り検出関数実行
         state = self.dozingDetection.detect_dozing(ret, rgb)
+        # 状態表示
         if state == DOZING:
-            # TODO: ここでなんかputTextする
+            color = red
             cv2.putText(rgb, "DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
         elif state == NEARLY_DOZING:
+            color = yellow
             cv2.putText(rgb, "NEARLY_DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
         elif state == AWAKE:
-            # cv2.putText(rgb, "Sleepy eyes. Wake up!", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
-            print("AWAKE")
-        else:  # エラー
+            color = green
+            cv2.putText(rgb, "AWAKE", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
             pass
-            print("error")
+        else:
+            print("error: nothing detected (?)")
 
-        # TODO:
-        # detect_eyes内でputTextとかimshowとか実行してるからウィンドウがわかれちゃってる説あるから
-        # setVideoImageはいじらずにdetect_eyes関数の返り値とかをうまく調整してprocessing内で表示を調整できるようにするのがよさそう
-
-        # TODO: 適切な返り値を設定した後は前回のフレームの結果とかを保持していって表示を変えるような処理をつくりたい
-        color = green
+        # 状態の色表示
         rgb = cv2.putText(rgb, 'State:', (450, im.shape[-1]+50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
         rgb = cv2.putText(rgb, 'o', (555, im.shape[-1]+48), font, 1, color, 15, cv2.LINE_AA)
 
+        # RGBからBGRに変換
         dst = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         
         return dst
 
 
-""" 
+"""
 居眠り検知するクラス
 TODO :
 ・目の状態を検出
@@ -208,7 +232,7 @@ class DozingDetection():
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
         self.time_closed_eyelid = 0  # まぶたが連続で何秒とじているか
 
-    def calc_ear(self, eye):
+    def calsEAR(self, eye):
         A = distance.euclidean(eye[1], eye[5])
         B = distance.euclidean(eye[2], eye[4])
         C = distance.euclidean(eye[0], eye[3])
@@ -233,7 +257,7 @@ class DozingDetection():
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
 
         # 顔検出ができていなかったら
-        if len(faces) != 1:
+        if len(faces) == 0:
             return False
 
         # 顔検出ができているならば
@@ -252,30 +276,28 @@ class DozingDetection():
             left_eye = face_parts[42:48]
             self.eye_marker(face_gray_resized, left_eye)
 
-            left_eye_ear = self.calc_ear(left_eye)
+            left_eye_ear = self.calsEAR(left_eye)
             cv2.putText(rgb, "LEFT eye EAR:{} ".format(left_eye_ear), (10, 100), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
 
             right_eye = face_parts[36:42]
             self.eye_marker(face_gray_resized, right_eye)
 
-            right_eye_ear = self.calc_ear(right_eye)
+            right_eye_ear = self.calsEAR(right_eye)
             cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
 
-            # まぶたが閉じている
+            cv2.imshow('frame_resize', face_gray_resized)  # これがグレーのウィンドウ
+            fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
+            rgb = cv2.putText(rgb, "FPS:{} ".format(
+            int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
+
+            # TODO:
+            # この辺のデバッグ用のputTextはあとで削除する
+
+            # 眠そうな瞼をしている
             if (left_eye_ear + right_eye_ear) < 0.55:
                 return True
             else:
                 return False
-
-                # この表示はあとで消す
-                cv2.putText(rgb, "Sleepy eyes. Wake up!", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
-                #  TODO: ここでなにか返り値用の変数をつくるとよさそう
-
-            cv2.imshow('frame_resize', face_gray_resized)  # これがグレーのウィンドウ
-
-        #fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
-        #rgb = cv2.putText(rgb, "FPS:{} ".format(int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
-        #return rgb, faces
     
     def detect_dozing(self, ret, rgb):
         if self.isDozing(ret,rgb):
@@ -288,6 +310,11 @@ class DozingDetection():
             閾値を設定する(マジックナンバーも避けるようにする)
             返り値を工夫する (3状態あるためTrue,Falseじゃ足らない)
             -> マクロを使う？
+
+            TODO :
+            瞼を開き続けたり閉じ続けたりして試してみたら、
+            どうやら正しい状態検知にはなっていなさそうだったのでここは修正必須っぽい。
+            目の状態を定性的に考えてもうちょと細かい処理を加えたい
         """
         if self.time_closed_eyelid >= 20:
             return DOZING
