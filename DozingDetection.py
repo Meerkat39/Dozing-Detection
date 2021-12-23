@@ -177,6 +177,8 @@ class VideoCaptureView(QGraphicsView):
         else:
             # ２回目以降はQImage, QPixmapを設定するだけ
             self.pixmap.convertFromImage(self.image)
+            # 縦横の大きさの調整
+            self.pixmap= self.pixmap.scaled(600, 600, Qt.KeepAspectRatio)
             self.item.setPixmap(self.pixmap)
 
     def processing(self, src):
