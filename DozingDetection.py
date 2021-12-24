@@ -66,6 +66,7 @@ class MyWindow(QMainWindow):
         # ツールバー「通知」
         alarmAct = QAction('通知', self)
         alarmAct.triggered.connect(self.beep)
+        self.toolbar = self.addToolBar('通知')
         self.toolbar.addAction(alarmAct)
 
         self.resize(600, 600)                  # 600x600ピクセルにリサイズ
