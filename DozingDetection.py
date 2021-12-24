@@ -165,7 +165,7 @@ class VideoCaptureView(QGraphicsView):
         cv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)  # 色変換 BGR->RGB
 
         cv_img = self.processing(cv_img)
-
+        print(type(cv_img))
         height, width, dim = cv_img.shape
         bytesPerLine = dim * width                       # 1行辺りのバイト数
 
@@ -178,22 +178,18 @@ class VideoCaptureView(QGraphicsView):
             # ２回目以降はQImage, QPixmapを設定するだけ
             self.pixmap.convertFromImage(self.image)
             # 縦横の大きさの調整
-            self.pixmap= self.pixmap.scaled(600, 600, Qt.KeepAspectRatio)
+            self.pixmap= self.pixmap.scaled(600, 600, Qt.KeepAspectRatio,Qt.SmoothTransformation)
             self.item.setPixmap(self.pixmap)
 
     def processing(self, src):
         """ 画像処理 """
         im = src.copy()
-
         font = cv2.FONT_HERSHEY_SIMPLEX
         # BGR表記に修正しました（おそらくputTextの引数がBGRになっている必要あり）
         red = (0, 0, 255)
         yellow = (0, 255, 255)
         green = (0, 255, 0)
-        """
-            状態によって色を更新(未実装) 
-            DozingDetectionクラスから状態を取得し、それによってcolorを場合分け
-        """
+        
         ret, rgb = self.capture.read()
         # 居眠り検出関数実行
         state = self.dozingDetection.detect_dozing(ret, rgb)
@@ -252,48 +248,58 @@ class DozingDetection():
         ただし、顔が検出できていなかったらTrueを返す
         (姿勢が悪いのは眠っているためと見なしTrue)
     """
-    def isDozing(self, ret, rgb):
+    def isClosedEyelid(self, ret, rgb):
         tick = cv2.getTickCount()
-
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
 
         # 顔検出ができていなかったら
         if len(faces) == 0:
-            return False
+            return True
 
         # 顔検出ができているならば
         if len(faces) == 1:
+            # 顔領域を取得する
             x, y, w, h = faces[0, :]
-            cv2.rectangle(rgb, (x, y), (x + w, y + h), (255, 0, 0), 2)
-
             face_gray = gray[y:(y + h), x:(x + w)]
             scale = 480 / h
             face_gray_resized = cv2.resize(face_gray, dsize=None, fx=scale, fy=scale)
-
             face = dlib.rectangle(0, 0, face_gray_resized.shape[1], face_gray_resized.shape[0])
             face_parts = self.face_parts_detector(face_gray_resized, face)
             face_parts = face_utils.shape_to_np(face_parts)
-
+            # 両目のEARを計算する
             left_eye = face_parts[42:48]
-            self.eye_marker(face_gray_resized, left_eye)
-
             left_eye_ear = self.calsEAR(left_eye)
-            cv2.putText(rgb, "LEFT eye EAR:{} ".format(left_eye_ear), (10, 100), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
-
             right_eye = face_parts[36:42]
-            self.eye_marker(face_gray_resized, right_eye)
-
             right_eye_ear = self.calsEAR(right_eye)
-            cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
-
-            cv2.imshow('frame_resize', face_gray_resized)  # これがグレーのウィンドウ
-            fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
-            rgb = cv2.putText(rgb, "FPS:{} ".format(
-            int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
 
             # TODO:
             # この辺のデバッグ用のputTextはあとで削除する
+            # -> 削除するのではなく、コメント文にする
+            # (cv2.rectangleは顔検出ができてるかわかるものなので常に表示してもいいかも)
+            # 豆知識:
+            # regionは折りたたむことができる
+            # Visual Studio Codeでは、
+            # 選択した範囲を Ctrl + K -> Ctrl + C でコメント文にする
+            # 選択した範囲を Ctrl + K -> Ctrl + U でコメント文を解除する
+            # ことができます！
+
+            # region デバッグ用
+            # メインウィンドウに検出した顔の四角形領域を表示する
+            cv2.rectangle(rgb, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            # メインウィンドウに左・右目のEARを表示する
+            cv2.putText(rgb, "LEFT eye EAR:{} ".format(left_eye_ear), (10, 100), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
+            cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
+            # メインウィンドウでFPSを表示する
+            fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
+            rgb = cv2.putText(rgb, "FPS:{} ".format(
+            int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
+            # 別のウィンドウで検出した顔領域だけをグレーで表示する
+            cv2.imshow('frame_resize', face_gray_resized)
+            # 別のウィンドウで左・右目の位置を6つの点で縁取る
+            self.eye_marker(face_gray_resized, left_eye)
+            self.eye_marker(face_gray_resized, right_eye)
+            # endregion
 
             # 眠そうな瞼をしている
             if (left_eye_ear + right_eye_ear) < 0.55:
@@ -302,7 +308,7 @@ class DozingDetection():
                 return False
     
     def detect_dozing(self, ret, rgb):
-        if self.isDozing(ret,rgb):
+        if self.isClosedEyelid(ret,rgb):
             self.time_closed_eyelid += 1
         else:
             self.time_closed_eyelid = 0
