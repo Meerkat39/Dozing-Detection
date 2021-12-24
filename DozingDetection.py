@@ -165,7 +165,6 @@ class VideoCaptureView(QGraphicsView):
         cv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)  # 色変換 BGR->RGB
 
         cv_img = self.processing(cv_img)
-        print(type(cv_img))
         height, width, dim = cv_img.shape
         bytesPerLine = dim * width                       # 1行辺りのバイト数
 
