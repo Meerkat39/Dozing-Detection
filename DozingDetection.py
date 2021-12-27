@@ -9,6 +9,7 @@ import dlib
 from imutils import face_utils
 from scipy.spatial import distance
 import platform
+from collections import deque
 
 DOZING, NEARLY_DOZING, AWAKE = 0, 1, 2
 
@@ -228,7 +229,9 @@ class DozingDetection():
     def __init__(self):
         self.face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_alt2.xml')
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
-        self.time_closed_eyelid = 0  # まぶたが連続で何秒とじているか
+        self.time_closed_eyelid = 0     # まぶたが連続で何秒とじているか
+        self.eyelid_state = deque([])   # 直近の瞼の状態を入れるキュー
+        # self.cnt = 0                    # 関数が呼ばれた回数のカウント
 
     def calsEAR(self, eye):
         A = distance.euclidean(eye[1], eye[5])
@@ -258,6 +261,8 @@ class DozingDetection():
             return True
 
         # 顔検出ができているならば
+        if len(faces) > 1:
+            cv2.putText(rgb, "警告: 2人以上の顔が検出されています", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1) # 仮の警告文表示
         if len(faces) == 1:
             # 顔領域を取得する
             x, y, w, h = faces[0, :]
@@ -302,7 +307,7 @@ class DozingDetection():
             # endregion
 
             # 眠そうな瞼をしている
-            if (left_eye_ear + right_eye_ear) < 0.55:
+            if (left_eye_ear + right_eye_ear) < 0.47: ########### 元々0.55だったけど全部Trueになってたので小さくしてみた
                 return True
             else:
                 return False
@@ -310,8 +315,22 @@ class DozingDetection():
     def detect_dozing(self, ret, rgb):
         if self.isClosedEyelid(ret,rgb):
             self.time_closed_eyelid += 1
+            self.eyelid_state.append(1)
         else:
             self.time_closed_eyelid = 0
+            self.eyelid_state.append(0)
+
+        # 直近50フレームのうち何回 True になっているかで判定
+        if len(self.eyelid_state) == 50:
+            num = sum(self.eyelid_state)
+            self.eyelid_state.popleft()
+            print(num, self.eyelid_state)
+            if num > 48:
+                return DOZING
+            elif num > 40:
+                return NEARLY_DOZING
+            else:
+                return AWAKE
         
         """
             TODO :
