@@ -107,6 +107,12 @@ class MyWindow(QMainWindow):
 
         QMessageBox.warning(self, "警告", "居眠り検知しました.")
 
+    def setInterval(self):
+        """直近何秒の結果を使うか(duration)とfpsの値(repeat_interval)を「設定」から受け取って変更し、
+        DozinDetectionで直近何フレームを使うかの値も変更する"""
+        # TODO: 設定から数値を受け取って、setInterval関数に渡す
+        self.viewer.setInterval(duration=10, fps=200)
+
 
 """ 
 ビデオキャプチャクラス 
@@ -138,6 +144,11 @@ class VideoCaptureView(QGraphicsView):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.setVideoImage)
         self.timer.start(self.repeat_interval)
+
+    def setInterval(self, duration=10, fps=200):
+        self.repeat_interval = fps
+        num_frames = duration * 1000 / fps
+        self.dozingDetection.set_num_of_frames()
     
     def setVideoCapture(self, isCamera = True, filepath = ""):
         """ cv2.VideoCapture関数の引数を設定する（エラー処理用） """ 
@@ -229,9 +240,17 @@ class DozingDetection():
     def __init__(self):
         self.face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_alt2.xml')
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
+        self.ear_threshold = 0.47       # EARの値から眠そうな瞼かを判定するときの閾値
         self.time_closed_eyelid = 0     # まぶたが連続で何秒とじているか
-        self.eyelid_state = deque([])   # 直近の瞼の状態を入れるキュー
-        # self.cnt = 0                    # 関数が呼ばれた回数のカウント
+        self.num_of_latest_frames = 50  # 使用する直近のフレーム数
+        self.eyelid_state = deque([0] * (self.num_of_latest_frames - 1)) # 直近の瞼の状態を入れるキュー
+        self.thresholds = [48, 40]      # [寝ている, 眠い] の状態を判定する閾値
+    
+    def set_num_of_frames(self, num_frames = 50):
+        self.num_of_latest_frames = num_frames
+        self.eyelid_state = deque([0] * (self.num_of_latest_frames - 1))
+        self.thresholds[0] = int(self.num_of_latest_frames * 0.96) # 9.6割の時間瞼が閉じかけていたら寝ていると判定
+        self.thresholds[1] = int(self.num_of_latest_frames * 0.80) # 8  割の時間瞼が閉じかけていたら眠そうと判定
 
     def calsEAR(self, eye):
         A = distance.euclidean(eye[1], eye[5])
@@ -259,10 +278,11 @@ class DozingDetection():
         # 顔検出ができていなかったら
         if len(faces) == 0:
             return True
-
+        
         # 顔検出ができているならば
         if len(faces) > 1:
             cv2.putText(rgb, "警告: 2人以上の顔が検出されています", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1) # 仮の警告文表示
+        
         if len(faces) == 1:
             # 顔領域を取得する
             x, y, w, h = faces[0, :]
@@ -306,11 +326,11 @@ class DozingDetection():
             self.eye_marker(face_gray_resized, right_eye)
             # endregion
 
-            # 眠そうな瞼をしている
-            if (left_eye_ear + right_eye_ear) < 0.47: ########### 元々0.55だったけど全部Trueになってたので小さくしてみた
-                return True
+            # 眠そうな瞼をしているか
+            if (left_eye_ear + right_eye_ear) < self.ear_threshold:
+                return True     # 眠そうな瞼
             else:
-                return False
+                return False    # 眠くなさそうな瞼
     
     def detect_dozing(self, ret, rgb):
         if self.isClosedEyelid(ret,rgb):
@@ -320,14 +340,27 @@ class DozingDetection():
             self.time_closed_eyelid = 0
             self.eyelid_state.append(0)
 
-        # 直近50フレームのうち何回 True になっているかで判定
-        if len(self.eyelid_state) == 50:
+        # 直近定数個フレームのうち何割が True になっているかで判定
+        frame_num = len(self.eyelid_state)
+        if frame_num == self.num_of_latest_frames:
             num = sum(self.eyelid_state)
             self.eyelid_state.popleft()
             print(num, self.eyelid_state)
-            if num > 48:
+            if num > self.thresholds[0]:
                 return DOZING
-            elif num > 40:
+            elif num > self.thresholds[1]:
+                return NEARLY_DOZING
+            else:
+                return AWAKE
+
+        elif frame_num > self.num_of_latest_frames:
+            while frame_num >= self.num_of_latest_frames:
+                self.eyelid_state.popleft()
+
+        else:
+            if self.time_closed_eyelid >= 20:
+                return DOZING
+            elif self.time_closed_eyelid >= 10:
                 return NEARLY_DOZING
             else:
                 return AWAKE
@@ -343,12 +376,6 @@ class DozingDetection():
             どうやら正しい状態検知にはなっていなさそうだったのでここは修正必須っぽい。
             目の状態を定性的に考えてもうちょと細かい処理を加えたい
         """
-        if self.time_closed_eyelid >= 20:
-            return DOZING
-        elif self.time_closed_eyelid >= 10:
-            return NEARLY_DOZING
-        else:
-            return AWAKE
         
 
 
