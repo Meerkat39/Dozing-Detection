@@ -4,7 +4,8 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 import cv2
 import numpy as np
-import platform # 追加
+import platform
+import pygame
 
 """ 
 Windowクラス 
@@ -13,12 +14,17 @@ TODO :
 ・Settings項目
 ・カメラの開始 / 停止
 """
+
+
+
 class MyWindow(QMainWindow):
     
     def __init__(self):
         """ インスタンスが生成されたときに呼び出されるメソッド """
         super(MyWindow, self).__init__()
         self.initUI()
+        self.volume_set = 0.5 #音量(初期設定)
+        self.alarm_set = 1    #通知設定(1で通知ON,0で通知OFF)
         
     def initUI(self):
         """ UIの初期化 """
@@ -36,11 +42,34 @@ class MyWindow(QMainWindow):
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction(fileAction)
         
+        """
         # 項目「Settings」の追加
         settingsAction = QAction('&', self)
         settingsAction.triggered.connect(self.close)
         settingsMenu = menubar.addMenu('&Settings')
         settingsMenu.addAction(settingsAction)
+        """
+        
+        # 設定メニュー  
+        alarm_on = QAction('&アラーム :      ON  ', self)
+        alarm_off = QAction('&アラーム :      OFF  ', self)
+        volume1 = QAction('&音量 :　　  大 ', self)
+        volume2 = QAction('&音量 : 　　 中 ', self)
+        volume3 = QAction('&音量 : 　　 小 ', self)
+        alarm_on.triggered.connect(self.conf_alarm_on)
+        alarm_off.triggered.connect(self.conf_alarm_off)
+        volume1.triggered.connect(self.conf_volume1)
+        volume2.triggered.connect(self.conf_volume2)
+        volume3.triggered.connect(self.conf_volume3)
+        
+        fileMenu = menubar.addMenu('&アラーム設定')
+        volumeMenu = menubar.addMenu('&音量設定')
+        fileMenu.addAction(alarm_on)
+        fileMenu.addAction(alarm_off)
+        volumeMenu.addAction(volume1)
+        volumeMenu.addAction(volume2)
+        volumeMenu.addAction(volume3)
+       
 
         # ツールバー「一時停止・再開ボタン」
         videoAct = QAction('一時停止・再開', self)
@@ -49,11 +78,11 @@ class MyWindow(QMainWindow):
         self.toolbar.addAction(videoAct)
         
     
-        """↓追加"""
+        # 通知ボタン（動作を確認するための仮のボタン）
         alarm = QAction('通知', self)
         alarm.triggered.connect(self.beep)
         self.toolbar.addAction(alarm)
-        """ここまで"""
+        
         
         
         self.resize(600, 600)                  # 600x600ピクセルにリサイズ
@@ -75,26 +104,38 @@ class MyWindow(QMainWindow):
         
         
         
+    def conf_alarm_on(self):
+        print ("アラームON")
+        self.alarm_set = 1
+        
+    def conf_alarm_off(self):
+        print ("アラームOFF")
+        self.alarm_set = 0
+        
+    def conf_volume1(self): #音量：大
+        self.volume_set = 1
+        
+    def conf_volume2(self): #音量：中
+        self.volume_set = 0.5
+        
+    def conf_volume3(self): #音量：小
+        self.volume_set = 0.01
         
     def beep(self):
-        """ 異常を検知したときの処理（ビープ音を鳴らす.） """
+        """ 異常を検知したときの処理 """
+
+        if self.alarm_set == 1:
+            pygame.mixer.init()
+            my_sound = pygame.mixer.Sound("alarm.mp3") #音源の読み込み
+            my_sound.play()
+            my_sound.set_volume(self.volume_set) #音量設定
+
+            #print(self.volume_set)
         
-        #freq : 周波数
-        #dur  : 継続時間（ms）
-        freq=1400
-        dur=1000
-        if platform.system() == "Windows":
-            # Windowsの場合
-            import winsound
-            winsound.Beep(freq, dur)
-        else:
-            # Macの場合
-            import os
-            os.system('play -n synth %s sin %s' % (dur/1000, freq))
+            QMessageBox.warning(self, "警告", "居眠り検知しました.")
             
-        # Warning Message box
-        
-        QMessageBox.warning(self, "警告", "居眠り検知しました.")
+        else:
+            print("検知")
         
     
 
