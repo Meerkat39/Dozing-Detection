@@ -146,7 +146,7 @@ class VideoCaptureView(QGraphicsView):
         self.alarm_set = True    # 通知設定(1で通知ON,0で通知OFF)
         self.volume_set = 0.5 # 音量(初期設定)
         pygame.mixer.init()
-        self.beep_sound = pygame.mixer.Sound("alarm.mp3")
+        self.beep_sound = pygame.mixer.Sound("alarm.wav")
         
         # VideoCaptureを初期化 (カメラからの画像取り込み)
         self.setVideoCapture(True)
