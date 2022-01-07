@@ -62,9 +62,9 @@ class MyWindow(QMainWindow):
         # 設定メニュー  
         alarm_on = QAction('&アラーム :      ON  ', self)
         alarm_off = QAction('&アラーム :      OFF  ', self)
-        volume1 = QAction('&音量 :　　  大 ', self)
-        volume2 = QAction('&音量 : 　　 中 ', self)
-        volume3 = QAction('&音量 : 　　 小 ', self)
+        volume1 = QAction('&音量 :      大 ', self)
+        volume2 = QAction('&音量 :      中 ', self)
+        volume3 = QAction('&音量 :      小 ', self)
         alarm_on.triggered.connect(self.conf_alarm_on)
         alarm_off.triggered.connect(self.conf_alarm_off)
         volume1.triggered.connect(self.conf_volume1)
@@ -385,6 +385,10 @@ class DozingDetection():
 
         # 直近定数個フレームのうち何割が True になっているかで判定
         frame_num = len(self.eyelid_state)
+        if frame_num > self.num_of_latest_frames:
+            while frame_num > self.num_of_latest_frames:
+                self.eyelid_state.popleft()
+
         if frame_num == self.num_of_latest_frames:
             num = sum(self.eyelid_state)
             self.eyelid_state.popleft()
@@ -394,12 +398,7 @@ class DozingDetection():
             elif num > self.thresholds[1]:
                 return NEARLY_DOZING
             else:
-                return AWAKE
-
-        elif frame_num > self.num_of_latest_frames:
-            while frame_num >= self.num_of_latest_frames:
-                self.eyelid_state.popleft()
-
+                return AWAKE            
         else:
             if self.time_closed_eyelid >= 20:
                 return DOZING
