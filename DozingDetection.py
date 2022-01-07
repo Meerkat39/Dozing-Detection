@@ -143,10 +143,10 @@ class VideoCaptureView(QGraphicsView):
         self.pixmap = None
         self.item = None
         self.dozingDetection = DozingDetection()
-        self.alarm_set = True    # 通知設定(1で通知ON,0で通知OFF)
-        self.volume_set = 0.5 # 音量(初期設定)
+        self.is_alarm_on = True
         pygame.mixer.init()
         self.beep_sound = pygame.mixer.Sound("alarm.mp3")
+        self.beep_sound.set_volume(0.5)  # 音量を初期化
         
         # VideoCaptureを初期化 (カメラからの画像取り込み)
         self.setVideoCapture(True)
@@ -210,16 +210,15 @@ class VideoCaptureView(QGraphicsView):
             self.item.setPixmap(self.pixmap)
 
     def setAlarm(self, isON):
-        self.alarm_set = isON
+        self.is_alarm_on = isON
 
     def setVolume(self, value):
         self.beep_sound.set_volume(value)
 
     def beep(self):
         """ 異常を検知したときの処理 """
-        if self.alarm_set == True:
+        if self.is_alarm_on == True:
             self.beep_sound.play()
-
 
     def processing(self, src):
         """ 居眠り状態を更新して表示する """
@@ -241,6 +240,7 @@ class VideoCaptureView(QGraphicsView):
             color = red
             cv2.putText(rgb, "DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
         elif state == NEARLY_DOZING:
+            self.beep()
             color = yellow
             cv2.putText(rgb, "NEARLY_DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
         elif state == AWAKE:
