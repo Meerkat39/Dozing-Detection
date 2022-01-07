@@ -14,157 +14,126 @@ from collections import deque
 
 DOZING, NEARLY_DOZING, AWAKE = 0, 1, 2
 
+
 """ 
 Windowクラス 
-TODO :
-・File項目
-・Settings項目
-・カメラの開始 / 停止
+    カメラor動画から取得した画像を表示する
 """
-
-
-
 class MyWindow(QMainWindow):
 
     def __init__(self, viewer):
-        """ インスタンスが生成されたときに呼び出されるメソッド """
         super(MyWindow, self).__init__()
         self.initUI()
-        self.volume_set = 0.5 #音量(初期設定)
-        self.alarm_set = 1    #通知設定(1で通知ON,0で通知OFF)
-        
         self.viewer = viewer
 
     def initUI(self):
         """ UIの初期化 """
-
-        """
-            File -> {open} : ファイルを開く
-            Setting -> {,  : ???
-                        ,} : ???
-            
-        """
         menubar = self.menuBar()
+
         # 項目「File」の追加
-        fileAction = QAction('&open', self)
+        fileAction = QAction('&開く', self)
         fileAction.triggered.connect(self.setVideo)
-        fileMenu = menubar.addMenu('&File')
+        fileMenu = menubar.addMenu('&ファイル')
         fileMenu.addAction(fileAction)
         
-        """
-        # 項目「Settings」の追加
-        settingsAction = QAction('&', self)
-        settingsAction.triggered.connect(self.close)
-        settingsMenu = menubar.addMenu('&Settings')
-        settingsMenu.addAction(settingsAction)
-        """
-        
-        # 設定メニュー  
+        # 項目「アラーム設定」の追加
         alarm_on = QAction('&アラーム :      ON  ', self)
         alarm_off = QAction('&アラーム :      OFF  ', self)
-        volume1 = QAction('&音量 :      大 ', self)
-        volume2 = QAction('&音量 :      中 ', self)
-        volume3 = QAction('&音量 :      小 ', self)
-        alarm_on.triggered.connect(self.conf_alarm_on)
-        alarm_off.triggered.connect(self.conf_alarm_off)
-        volume1.triggered.connect(self.conf_volume1)
-        volume2.triggered.connect(self.conf_volume2)
-        volume3.triggered.connect(self.conf_volume3)
-        
-        fileMenu = menubar.addMenu('&アラーム設定')
-        volumeMenu = menubar.addMenu('&音量設定')
-        fileMenu.addAction(alarm_on)
-        fileMenu.addAction(alarm_off)
-        volumeMenu.addAction(volume1)
-        volumeMenu.addAction(volume2)
-        volumeMenu.addAction(volume3)
-       
+        alarm_on.triggered.connect(self.setAlarmOn)
+        alarm_off.triggered.connect(self.setAlarmOff)
+        alarmMenu = menubar.addMenu('&アラーム設定')
+        alarmMenu.addAction(alarm_on)
+        alarmMenu.addAction(alarm_off)
 
-        # ツールバー「カメラをセットするボタン」
+        # 項目「音量設定」の追加
+        volume_big = QAction('&音量 :  大 ', self)
+        volume_middle = QAction('&音量 :  中 ', self)
+        volume_small = QAction('&音量 :  小 ', self)
+        volume_big.triggered.connect(self.setVolumeBig)
+        volume_middle.triggered.connect(self.setVolumeMiddle)
+        volume_small.triggered.connect(self.setVolumeSmall)
+        volumeMenu = menubar.addMenu('&音量設定')
+        volumeMenu.addAction(volume_big)
+        volumeMenu.addAction(volume_middle)
+        volumeMenu.addAction(volume_small)
+    
+        # 項目「直近n秒を検出」の追加
+        duration_long = QAction('&直近10秒を検出(デフォルト) ', self)
+        duration_neutral = QAction('&直近20秒を検出 ', self)
+        duration_short = QAction('&直近30秒を検出 ', self)
+        duration_long.triggered.connect(self.setDurationLong)
+        duration_neutral.triggered.connect(self.setDurationNeutral)
+        duration_short.triggered.connect(self.setDurationShort)
+        volumeMenu = menubar.addMenu('&検出時間設定')
+        volumeMenu.addAction(duration_long)
+        volumeMenu.addAction(duration_neutral)
+        volumeMenu.addAction(duration_short)
+
+        # ツールバー「カメラを使用するボタン」
         cameraAct = QAction('カメラを使用する', self)
         cameraAct.triggered.connect(self.setCamera)
-        # （TODO: addToolBarの引数間違ってたら直す）
         self.toolbar = self.addToolBar('カメラを使用する')
         self.toolbar.addAction(cameraAct)
 
         # ツールバー「一時停止ボタン」
         pauseAct = QAction('一時停止', self)
         pauseAct.triggered.connect(self.pause)
-        # （TODO: addToolBarの引数間違ってたら直す）
         self.toolbar = self.addToolBar('一時停止')
         self.toolbar.addAction(pauseAct)
-
-        # ツールバー「通知」
-        alarmAct = QAction('通知', self)
-        alarmAct.triggered.connect(self.beep)
-        self.toolbar = self.addToolBar('通知')
-        self.toolbar.addAction(alarmAct)
 
         self.resize(600, 600)                  # 600x600ピクセルにリサイズ
         self.setWindowTitle('居眠り検知ツール')  # タイトルを設定
         self.show()
 
     def setVideo(self):
-        """ 選択されたファイルのパスを取得して、 """
+        """ 選択されたファイルのパスを取得して、ビデオをセットする"""
         self.filepath = QFileDialog.getOpenFileName(self, caption="", directory="", filter="*.mp4")[0]
-        self.viewer.setVideoCapture(False, self.filepath)
+        self.viewer.setVideoCapture(False, self.filepath)            
+        
+    def setAlarmOn(self):
+        self.viewer.setAlarm(True)
+        
+    def setAlarmOff(self):
+        self.viewer.setAlarm(False)
+        
+    def setVolumeBig(self):
+        self.viewer.setVolume(1)
+        
+    def setVolumeMiddle(self):
+        self.viewer.setVolume(0.5)
+        
+    def setVolumeSmall(self):
+        self.viewer.setVolume(0.01)
+
+    def setInterval(self, duration_s = 10, fps = 200):
+        """ 
+            直近何秒の結果を使うかを変更する (fpsは200で固定とする)
+            DozinDetectionで直近何フレームを使うかの値も変更する
+        """
+        self.viewer.setInterval(duration_s, fps)
+
+    def setDurationLong(self):
+        self.setInterval(duration_s = 10)
+        
+    def setDurationNeutral(self):
+        self.setInterval(duration_s = 20)
+        
+    def setDurationShort(self):
+        self.setInterval(duration_s = 30)
 
     def setCamera(self):
-        """ カメラに切り替える """
         self.viewer.setVideoCapture(True)
 
     def pause(self):
-        """ 一時停止ボタンが押されたときの処理 """
-        self.viewer.capture.release()               
-        
-    def conf_alarm_on(self):
-        print ("アラームON")
-        self.alarm_set = 1
-        
-    def conf_alarm_off(self):
-        print ("アラームOFF")
-        self.alarm_set = 0
-        
-    def conf_volume1(self): #音量：大
-        self.volume_set = 1
-        
-    def conf_volume2(self): #音量：中
-        self.volume_set = 0.5
-        
-    def conf_volume3(self): #音量：小
-        self.volume_set = 0.01
-        
-    def beep(self):
-        """ 異常を検知したときの処理 """
-
-        if self.alarm_set == 1:
-            pygame.mixer.init()
-            my_sound = pygame.mixer.Sound("alarm.mp3") #音源の読み込み
-            my_sound.play()
-            my_sound.set_volume(self.volume_set) #音量設定
-
-            #print(self.volume_set)
-        
-            QMessageBox.warning(self, "警告", "居眠り検知しました.")
-            
-        else:
-            print("検知")
-            
-    def setInterval(self):
-        """直近何秒の結果を使うか(duration)とfpsの値(repeat_interval)を「設定」から受け取って変更し、
-        DozinDetectionで直近何フレームを使うかの値も変更する"""
-        # TODO: 設定から数値を受け取って、setInterval関数に渡す
-        self.viewer.setInterval(duration=10, fps=200)
+        self.viewer.capture.release()   
 
 
 """ 
-ビデオキャプチャクラス 
-TODO :
-・状態によって居眠り状態の色を更新
-・リアルタイムの画像を処理するのか選択された動画の画像を処理するのかの場合分け
+ビデオキャプチャクラス
+    居眠り状態を更新して表示する
 """
 class VideoCaptureView(QGraphicsView):
-    repeat_interval = 200  # ms 間隔で画像更新
+    repeat_interval_ms = 200  # ms 間隔で画像更新
 
     def __init__(self, parent=None):
         """ コンストラクタ（インスタンスが生成される時に呼び出される） """
@@ -174,6 +143,10 @@ class VideoCaptureView(QGraphicsView):
         self.pixmap = None
         self.item = None
         self.dozingDetection = DozingDetection()
+        self.alarm_set = True    # 通知設定(1で通知ON,0で通知OFF)
+        self.volume_set = 0.5 # 音量(初期設定)
+        pygame.mixer.init()
+        self.beep_sound = pygame.mixer.Sound("alarm.mp3")
         
         # VideoCaptureを初期化 (カメラからの画像取り込み)
         self.setVideoCapture(True)
@@ -186,12 +159,12 @@ class VideoCaptureView(QGraphicsView):
         # タイマー更新 (一定間隔でsetVideoImageメソッドを呼び出す)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.setVideoImage)
-        self.timer.start(self.repeat_interval)
+        self.timer.start(self.repeat_interval_ms)
 
-    def setInterval(self, duration=10, fps=200):
-        self.repeat_interval = fps
-        num_frames = duration * 1000 / fps
-        self.dozingDetection.set_num_of_frames()
+    def setInterval(self, duration_s=10, fps=200):
+        self.repeat_interval_ms = fps
+        num_frames = duration_s * 1000 / fps
+        self.dozingDetection.setNumOfFrames(num_frames)
     
     def setVideoCapture(self, isCamera = True, filepath = ""):
         """ cv2.VideoCapture関数の引数を設定する（エラー処理用） """ 
@@ -236,8 +209,20 @@ class VideoCaptureView(QGraphicsView):
             self.pixmap= self.pixmap.scaled(600, 600, Qt.KeepAspectRatio,Qt.SmoothTransformation)
             self.item.setPixmap(self.pixmap)
 
+    def setAlarm(self, isON):
+        self.alarm_set = isON
+
+    def setVolume(self, value):
+        self.beep_sound.set_volume(value)
+
+    def beep(self):
+        """ 異常を検知したときの処理 """
+        if self.alarm_set == True:
+            self.beep_sound.play()
+
+
     def processing(self, src):
-        """ 画像処理 """
+        """ 居眠り状態を更新して表示する """
         im = src.copy()
         font = cv2.FONT_HERSHEY_SIMPLEX
         # BGR表記に修正しました（おそらくputTextの引数がBGRになっている必要あり）
@@ -246,10 +231,13 @@ class VideoCaptureView(QGraphicsView):
         green = (0, 255, 0)
         
         ret, rgb = self.capture.read()
-        # 居眠り検出関数実行
-        state = self.dozingDetection.detect_dozing(ret, rgb)
-        # 状態表示
+        # 居眠り状態を取得
+        state = self.dozingDetection.detectDozing(ret, rgb)
+        
+        # Stateとテキストと通知を更新
+        self.beep_sound.stop()  # 毎回通知をストップさせる
         if state == DOZING:
+            self.beep()
             color = red
             cv2.putText(rgb, "DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
         elif state == NEARLY_DOZING:
@@ -258,9 +246,8 @@ class VideoCaptureView(QGraphicsView):
         elif state == AWAKE:
             color = green
             cv2.putText(rgb, "AWAKE", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
-            pass
         else:
-            print("error: nothing detected (?)")
+            print("error: nothing detected")
 
         # 状態の色表示
         rgb = cv2.putText(rgb, 'State:', (450, im.shape[-1]+50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
@@ -274,46 +261,50 @@ class VideoCaptureView(QGraphicsView):
 
 """
 居眠り検知するクラス
-TODO :
-・目の状態を検出
+    現在のまぶたの状態を計算し、居眠り状態を判定する
 """
 class DozingDetection():
-    """元はdef __init__(self, viewer):"""
-
     def __init__(self):
         self.face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_alt2.xml')
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
         self.ear_threshold = 0.47       # EARの値から眠そうな瞼かを判定するときの閾値
-        self.time_closed_eyelid = 0     # まぶたが連続で何秒とじているか
         self.num_of_latest_frames = 50  # 使用する直近のフレーム数
         self.eyelid_state = deque([0] * (self.num_of_latest_frames - 1)) # 直近の瞼の状態を入れるキュー
-        self.thresholds = [48, 40]      # [寝ている, 眠い] の状態を判定する閾値
+        self.dozing_thresholds = [48, 40]      # [寝ている, 眠い] の状態を判定する閾値
     
-    def set_num_of_frames(self, num_frames = 50):
-        self.num_of_latest_frames = num_frames
-        self.eyelid_state = deque([0] * (self.num_of_latest_frames - 1))
-        self.thresholds[0] = int(self.num_of_latest_frames * 0.96) # 9.6割の時間瞼が閉じかけていたら寝ていると判定
-        self.thresholds[1] = int(self.num_of_latest_frames * 0.80) # 8  割の時間瞼が閉じかけていたら眠そうと判定
-
+    def setNumOfFrames(self, new_num_frames = 50):
+        pre_num_frames = self.num_of_latest_frames
+        self.num_of_latest_frames = new_num_frames
+        self.dozing_thresholds[0] = int(self.num_of_latest_frames * 0.96) # 9.6割の時間瞼が閉じかけていたら寝ていると判定
+        self.dozing_thresholds[1] = int(self.num_of_latest_frames * 0.80) # 8  割の時間瞼が閉じかけていたら眠そうと判定  
+        # dequeの更新
+        if pre_num_frames >= new_num_frames:       # dequeのサイズが小さくなったら  
+            while len(self.eyelid_state) >= new_num_frames:
+                self.eyelid_state.popleft()        # 古い情報を削る
+        elif pre_num_frames < new_num_frames - 1:  # dequeのサイズが大きくなったら
+            while len(self.eyelid_state) < new_num_frames - 1:
+                self.eyelid_state.append(0)        # 0を追加する
+    
     def calsEAR(self, eye):
+        """ Eyes Aspect Ratioを計算する"""
         A = distance.euclidean(eye[1], eye[5])
         B = distance.euclidean(eye[2], eye[4])
         C = distance.euclidean(eye[0], eye[3])
         eye_ear = (A + B) / (2.0 * C)
         return round(eye_ear, 3)
 
-    def eye_marker(self, face_mat, position):
+    def eyeMarker(self, face_mat, position):
         for i, ((x, y)) in enumerate(position):
             cv2.circle(face_mat, (x, y), 1, (255, 255, 255), -1)
             cv2.putText(face_mat, str(i), (x + 2, y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
 
-    """
-        眠っているなら   True
-        眠っていないなら False
-        ただし、顔が検出できていなかったらTrueを返す
-        (姿勢が悪いのは眠っているためと見なしTrue)
-    """
     def isClosedEyelid(self, ret, rgb):
+        """
+            眠っているなら   True
+            眠っていないなら False
+            ただし、顔が検出できていなかったらTrueを返す
+            (姿勢が悪いのは眠っているためと見なしTrue)
+        """
         tick = cv2.getTickCount()
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
@@ -324,7 +315,7 @@ class DozingDetection():
         
         # 顔検出ができているならば
         if len(faces) > 1:
-            cv2.putText(rgb, "警告: 2人以上の顔が検出されています", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1) # 仮の警告文表示
+            cv2.putText(rgb, "警告: 2人以上の顔が検出されています", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1) # 警告文表示
         
         if len(faces) == 1:
             # 顔領域を取得する
@@ -341,17 +332,6 @@ class DozingDetection():
             right_eye = face_parts[36:42]
             right_eye_ear = self.calsEAR(right_eye)
 
-            # TODO:
-            # この辺のデバッグ用のputTextはあとで削除する
-            # -> 削除するのではなく、コメント文にする
-            # (cv2.rectangleは顔検出ができてるかわかるものなので常に表示してもいいかも)
-            # 豆知識:
-            # regionは折りたたむことができる
-            # Visual Studio Codeでは、
-            # 選択した範囲を Ctrl + K -> Ctrl + C でコメント文にする
-            # 選択した範囲を Ctrl + K -> Ctrl + U でコメント文を解除する
-            # ことができます！
-
             # region デバッグ用
             # メインウィンドウに検出した顔の四角形領域を表示する
             cv2.rectangle(rgb, (x, y), (x + w, y + h), (255, 0, 0), 2)
@@ -365,8 +345,8 @@ class DozingDetection():
             # 別のウィンドウで検出した顔領域だけをグレーで表示する
             cv2.imshow('frame_resize', face_gray_resized)
             # 別のウィンドウで左・右目の位置を6つの点で縁取る
-            self.eye_marker(face_gray_resized, left_eye)
-            self.eye_marker(face_gray_resized, right_eye)
+            self.eyeMarker(face_gray_resized, left_eye)
+            self.eyeMarker(face_gray_resized, right_eye)
             # endregion
 
             # 眠そうな瞼をしているか
@@ -375,61 +355,36 @@ class DozingDetection():
             else:
                 return False    # 眠くなさそうな瞼
     
-    def detect_dozing(self, ret, rgb):
+    def detectDozing(self, ret, rgb):
         if self.isClosedEyelid(ret,rgb):
-            self.time_closed_eyelid += 1
             self.eyelid_state.append(1)
         else:
-            self.time_closed_eyelid = 0
             self.eyelid_state.append(0)
 
-        # 直近定数個フレームのうち何割が True になっているかで判定
+        # 直近のフレームのうち何割が True になっているかで判定
         frame_num = len(self.eyelid_state)
-        if frame_num > self.num_of_latest_frames:
-            while frame_num > self.num_of_latest_frames:
-                self.eyelid_state.popleft()
-
         if frame_num == self.num_of_latest_frames:
-            num = sum(self.eyelid_state)
+            num_closed = sum(self.eyelid_state)
             self.eyelid_state.popleft()
-            print(num, self.eyelid_state)
-            if num > self.thresholds[0]:
+            if num_closed > self.dozing_thresholds[0]:
                 return DOZING
-            elif num > self.thresholds[1]:
-                return NEARLY_DOZING
-            else:
-                return AWAKE            
-        else:
-            if self.time_closed_eyelid >= 20:
-                return DOZING
-            elif self.time_closed_eyelid >= 10:
+            elif num_closed > self.dozing_thresholds[1]:
                 return NEARLY_DOZING
             else:
                 return AWAKE
-        
-        """
-            TODO :
-            閾値を設定する(マジックナンバーも避けるようにする)
-            返り値を工夫する (3状態あるためTrue,Falseじゃ足らない)
-            -> マクロを使う？
-
-            TODO :
-            瞼を開き続けたり閉じ続けたりして試してみたら、
-            どうやら正しい状態検知にはなっていなさそうだったのでここは修正必須っぽい。
-            目の状態を定性的に考えてもうちょと細かい処理を加えたい
-        """
+        else:
+            cv2.putText(rgb, "警告: dequeのサイズに不備があります", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1) # 仮の警告文表示
+            print("警告: dequeのサイズに不備があります")
+            return AWAKE
         
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(app.deleteLater)
-
     viewer = VideoCaptureView()       # VideoCaptureView ウィジエットviewを作成
     main = MyWindow(viewer)           # メインウィンドウmainを作成
     main.setCentralWidget(viewer)     # mainにviewを埋め込む
     main.show()
-
     app.exec_()
-
     viewer.capture.release()
