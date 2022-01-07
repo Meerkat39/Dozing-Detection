@@ -145,7 +145,7 @@ class VideoCaptureView(QGraphicsView):
         self.dozingDetection = DozingDetection()
         self.is_alarm_on = True
         pygame.mixer.init()
-        self.beep_sound = pygame.mixer.Sound("alarm.mp3")
+        self.beep_sound = pygame.mixer.Sound("alarm.wav")
         self.beep_sound.set_volume(0.5)  # 音量を初期化
         
         # VideoCaptureを初期化 (カメラからの画像取り込み)
