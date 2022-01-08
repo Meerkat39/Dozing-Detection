@@ -193,7 +193,7 @@ class VideoCaptureView(QGraphicsView):
             return
         cv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)  # 色変換 BGR->RGB
 
-        cv_img = self.processing(cv_img)
+        cv_img = self.updateImage(cv_img)
         height, width, dim = cv_img.shape
         bytesPerLine = dim * width                       # 1行辺りのバイト数
 
@@ -220,7 +220,7 @@ class VideoCaptureView(QGraphicsView):
         if self.is_alarm_on == True:
             self.beep_sound.play()
 
-    def processing(self, src):
+    def updateImage(self, src):
         """ 居眠り状態を更新して表示する """
         im = src.copy()
         font = cv2.FONT_HERSHEY_SIMPLEX
