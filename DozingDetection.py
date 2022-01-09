@@ -222,41 +222,36 @@ class VideoCaptureView(QGraphicsView):
 
     def updateImage(self, src):
         """ 居眠り状態を更新して表示する """
-        im = src.copy()
+        rgb = src.copy()
         font = cv2.FONT_HERSHEY_SIMPLEX
-        # BGR表記に修正しました（おそらくputTextの引数がBGRになっている必要あり）
-        red = (0, 0, 255)
-        yellow = (0, 255, 255)
+        red = (255, 0, 0)
+        yellow = (255, 255, 0)
         green = (0, 255, 0)
         
-        ret, rgb = self.capture.read()
         # 居眠り状態を取得
-        state = self.dozingDetection.detectDozing(ret, rgb)
+        state = self.dozingDetection.detectDozing(rgb)
         
         # Stateとテキストと通知を更新
         self.beep_sound.stop()  # 毎回通知をストップさせる
         if state == DOZING:
             self.beep()
             color = red
-            cv2.putText(rgb, "DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
+            cv2.putText(rgb, "DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, red, 3, 1)
         elif state == NEARLY_DOZING:
             self.beep()
             color = yellow
-            cv2.putText(rgb, "NEARLY_DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
+            cv2.putText(rgb, "NEARLY_DOZING", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, red, 3, 1)
         elif state == AWAKE:
             color = green
-            cv2.putText(rgb, "AWAKE", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
+            cv2.putText(rgb, "AWAKE", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, red, 3, 1)
         else:
             print("error: nothing detected")
 
         # 状態の色表示
-        rgb = cv2.putText(rgb, 'State:', (450, im.shape[-1]+50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
-        rgb = cv2.putText(rgb, 'o', (555, im.shape[-1]+48), font, 1, color, 15, cv2.LINE_AA)
-
-        # RGBからBGRに変換
-        dst = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        rgb = cv2.putText(rgb, 'State:', (450, rgb.shape[-1]+50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
+        rgb = cv2.putText(rgb, 'o', (555, rgb.shape[-1]+48), font, 1, color, 15, cv2.LINE_AA)
         
-        return dst
+        return rgb
 
 
 """
@@ -267,12 +262,13 @@ class DozingDetection():
     def __init__(self):
         self.face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_alt2.xml')
         self.face_parts_detector = dlib.shape_predictor('./models/shape_predictor_68_face_landmarks.dat')
-        self.ear_threshold = 0.47       # EARの値から眠そうな瞼かを判定するときの閾値
-        self.num_of_latest_frames = 50  # 使用する直近のフレーム数
-        self.eyelid_state = deque([0] * (self.num_of_latest_frames - 1)) # 直近の瞼の状態を入れるキュー
-        self.dozing_thresholds = [48, 40]      # [寝ている, 眠い] の状態を判定する閾値
+        self.ear_threshold = 0.47           # EARの値から眠そうな瞼かを判定するときの閾値
+        self.num_of_latest_frames = 50      # 使用する直近のフレーム数
+        self.eyelid_state = deque([0] * (self.num_of_latest_frames - 1)) # 直近の瞼の状態を入れるキュー（高速であるためdequeを使用）
+        self.dozing_thresholds = [48, 40]   # [寝ている, 眠い] の状態を判定する閾値
     
     def setNumOfFrames(self, new_num_frames = 50):
+        """ 使用する直近のフレーム数や閾値、キューのサイズの変更を一括で行う関数 """
         pre_num_frames = self.num_of_latest_frames
         self.num_of_latest_frames = new_num_frames
         self.dozing_thresholds[0] = int(self.num_of_latest_frames * 0.96) # 9.6割の時間瞼が閉じかけていたら寝ていると判定
@@ -286,7 +282,7 @@ class DozingDetection():
                 self.eyelid_state.append(0)        # 0を追加する
     
     def calsEAR(self, eye):
-        """ Eyes Aspect Ratioを計算する"""
+        """ Eyes Aspect Ratioを計算する """
         A = distance.euclidean(eye[1], eye[5])
         B = distance.euclidean(eye[2], eye[4])
         C = distance.euclidean(eye[0], eye[3])
@@ -298,7 +294,7 @@ class DozingDetection():
             cv2.circle(face_mat, (x, y), 1, (255, 255, 255), -1)
             cv2.putText(face_mat, str(i), (x + 2, y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
 
-    def isClosedEyelid(self, ret, rgb):
+    def isClosedEyelid(self, rgb):
         """
             眠っているなら   True
             眠っていないなら False
@@ -309,15 +305,16 @@ class DozingDetection():
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.11, minNeighbors=3, minSize=(100, 100))
 
-        # 顔検出ができていなかったら
+        # 顔検出ができていなかったら寝ている判定にする
         if len(faces) == 0:
             return True
         
-        # 顔検出ができているならば
+        # 2人以上の顔が検出されていたら警告を出す
         if len(faces) > 1:
-            cv2.putText(rgb, "警告: 2人以上の顔が検出されています", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1) # 警告文表示
+            cv2.putText(rgb, "警告: 2人以上の顔が検出されています", (10, 180), cv2.FONT_HERSHEY_PLAIN, 3, (0, 0, 255), 3, 1)
         
-        if len(faces) == 1:
+        # 1人以上の顔が検出されていたら
+        if len(faces) >= 1:
             # 顔領域を取得する
             x, y, w, h = faces[0, :]
             face_gray = gray[y:(y + h), x:(x + w)]
@@ -334,19 +331,19 @@ class DozingDetection():
 
             # region デバッグ用
             # メインウィンドウに検出した顔の四角形領域を表示する
-            cv2.rectangle(rgb, (x, y), (x + w, y + h), (255, 0, 0), 2)
-            # メインウィンドウに左・右目のEARを表示する
-            cv2.putText(rgb, "LEFT eye EAR:{} ".format(left_eye_ear), (10, 100), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
-            cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
+            red = (255, 0, 0)
+            blue = (0, 0, 255)
+            cv2.rectangle(rgb, (x, y), (x + w, y + h), blue, 2)
             # メインウィンドウでFPSを表示する
             fps = cv2.getTickFrequency() / (cv2.getTickCount() - tick)
-            rgb = cv2.putText(rgb, "FPS:{} ".format(
-            int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2, cv2.LINE_AA)
-            # 別のウィンドウで検出した顔領域だけをグレーで表示する
-            cv2.imshow('frame_resize', face_gray_resized)
-            # 別のウィンドウで左・右目の位置を6つの点で縁取る
+            rgb = cv2.putText(rgb, "FPS:{} ".format(int(fps)), (10, 50), cv2.FONT_HERSHEY_PLAIN, 2, red, 2, cv2.LINE_AA)
+            # メインウィンドウに左・右目のEARを表示する
+            cv2.putText(rgb, "LEFT eye EAR:{} ".format(left_eye_ear), (10, 100), cv2.FONT_HERSHEY_PLAIN, 1, red, 1, cv2.LINE_AA)
+            cv2.putText(rgb, "RIGHT eye EAR:{} ".format(round(right_eye_ear, 3)), (10, 120), cv2.FONT_HERSHEY_PLAIN, 1, red, 1, cv2.LINE_AA)
+            # 別ウィンドウ：顔領域だけを切り取り、左・右目の位置を6つの点で縁取り、グレーで表示する
             self.eyeMarker(face_gray_resized, left_eye)
             self.eyeMarker(face_gray_resized, right_eye)
+            cv2.imshow('frame_resize', face_gray_resized)
             # endregion
 
             # 眠そうな瞼をしているか
@@ -355,8 +352,13 @@ class DozingDetection():
             else:
                 return False    # 眠くなさそうな瞼
     
-    def detectDozing(self, ret, rgb):
-        if self.isClosedEyelid(ret,rgb):
+    def detectDozing(self, rgb):
+        """
+        直近のフレームのうち何回(何割の回数)眠そうな瞼をしていたかで
+        「Dozing」「NEARLY_DOZING」「AWAKE」の3状態を判定して返す
+        """
+        # キューに結果を追加
+        if self.isClosedEyelid(rgb):
             self.eyelid_state.append(1)
         else:
             self.eyelid_state.append(0)
@@ -364,11 +366,11 @@ class DozingDetection():
         # 直近のフレームのうち何割が True になっているかで判定
         frame_num = len(self.eyelid_state)
         if frame_num == self.num_of_latest_frames:
-            num_closed = sum(self.eyelid_state)
-            self.eyelid_state.popleft()
-            if num_closed > self.dozing_thresholds[0]:
+            num_closed = sum(self.eyelid_state)             # キューの中身の合計（眠そうな瞼と判定された回数）
+            self.eyelid_state.popleft()                     # キューからpop
+            if num_closed > self.dozing_thresholds[0]:      # 寝ている判定閾値(96%の回数)
                 return DOZING
-            elif num_closed > self.dozing_thresholds[1]:
+            elif num_closed > self.dozing_thresholds[1]:    # 眠そう判定の閾値(80%の回数)
                 return NEARLY_DOZING
             else:
                 return AWAKE
